@@ -140,3 +140,21 @@ func TestMerge3RandomNoPanic(t *testing.T) {
 		}
 	}
 }
+
+func TestMerge3ZealousSplit(t *testing.T) {
+	ch := Merge3(L("a\nb\nc"), L("# H\nx\nL\ny"), L("# H\nx\nR\ny"))
+	var conflicts, stable int
+	for _, c := range ch {
+		if c.Conflict {
+			conflicts++
+			if len(c.Local) != 1 || c.Local[0] != "L" || c.Remote[0] != "R" {
+				t.Errorf("conflict chunk %+v", c)
+			}
+		} else {
+			stable += len(c.Lines)
+		}
+	}
+	if conflicts != 1 || stable != 3 {
+		t.Errorf("want 1 conflict line and 3 agreed lines, got %d / %d: %+v", conflicts, stable, ch)
+	}
+}

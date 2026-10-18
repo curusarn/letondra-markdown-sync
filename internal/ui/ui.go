@@ -58,6 +58,13 @@ func New(b Backend, ln net.Listener, token string) *Server {
 			return t.Format("15:04:05")
 		},
 		"hasPrefix": strings.HasPrefix,
+		"folderURL": func(s string) string {
+			id, err := config.FolderID(s)
+			if err != nil {
+				return ""
+			}
+			return "https://drive.google.com/drive/folders/" + id
+		},
 	}).ParseFS(files, "templates/*.html"))
 	return &Server{b: b, token: token, tpl: tpl, ln: ln}
 }

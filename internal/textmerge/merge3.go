@@ -7,7 +7,7 @@ import "sort"
 type Chunk struct {
 	Conflict bool
 	Lines    []string // the merged lines when Conflict is false
-	Base     []string // when Conflict: the common ancestor's lines
+	Base     []string // when Conflict: the common ancestor's lines (first chunk of a region)
 	Local    []string // when Conflict: the local (Obsidian) lines
 	Remote   []string // when Conflict: the Google Drive lines
 }
@@ -110,12 +110,21 @@ func Merge3(base, local, remote []string) []Chunk {
 			if equalLines(l, r) {
 				emit(l)
 			} else {
-				out = append(out, Chunk{
-					Conflict: true,
-					Base:     append([]string(nil), base[lo:hi]...),
-					Local:    l,
-					Remote:   r,
-				})
+				// Like git's "zealous" merge: lines both sides agree on are
+				// not part of the conflict, only the blocks that differ.
+				first := true
+				for _, op := range Diff(l, r) {
+					if op.Kind == Equal {
+						emit(l[op.A1:op.A2])
+						continue
+					}
+					c := Chunk{Conflict: true, Local: append([]string{}, l[op.A1:op.A2]...), Remote: append([]string{}, r[op.B1:op.B2]...)}
+					if first {
+						c.Base = append([]string(nil), base[lo:hi]...)
+						first = false
+					}
+					out = append(out, c)
+				}
 			}
 		}
 		pos = hi

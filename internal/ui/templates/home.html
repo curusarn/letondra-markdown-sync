@@ -37,7 +37,7 @@
 
 <h2>Synchronizované složky</h2>
 <table><tr><th>Lokálně</th><th>Google Drive</th></tr>
-{{range .Cfg.Mappings}}<tr><td>{{.Local}}</td><td><a href="https://drive.google.com/drive/folders/{{.DriveFolder}}" target="_blank">{{.DriveFolder}}</a></td></tr>{{end}}
+{{range .Cfg.Mappings}}<tr><td>{{.Local}}</td><td>{{with folderURL .DriveFolder}}<a href="{{.}}" target="_blank">Otevřít na Drive</a>{{else}}<span class="err">neplatný odkaz</span>{{end}}</td></tr>{{end}}
 </table>
 <script>setTimeout(()=>location.reload(),15000)</script>
 {{template "foot"}}
