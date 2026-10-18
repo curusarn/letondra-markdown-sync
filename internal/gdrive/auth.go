@@ -23,7 +23,9 @@ func ServiceAccountClient(ctx context.Context, keyPath string) (*http.Client, st
 	if err != nil {
 		return nil, "", fmt.Errorf("read service account key: %w", err)
 	}
-	cfg, err := google.JWTConfigFromJSON(key, "https://www.googleapis.com/auth/drive")
+	// documents.readonly: the Docs revisionId, which changes the moment a
+	// document is edited (Drive's own version lags about two minutes).
+	cfg, err := google.JWTConfigFromJSON(key, "https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/documents.readonly")
 	if err != nil {
 		return nil, "", fmt.Errorf("parse service account key: %w", err)
 	}

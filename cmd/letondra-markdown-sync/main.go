@@ -295,8 +295,7 @@ func (a *app) Resolve(id, text string) error {
 
 func (a *app) SyncNow() {
 	if e := a.eng(); e != nil {
-		e.Poll()
-		e.SyncAll()
+		e.CheckAll()
 	}
 }
 

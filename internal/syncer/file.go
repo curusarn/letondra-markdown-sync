@@ -72,7 +72,17 @@ func (e *Engine) blob(key string) string {
 	return s
 }
 
+// download reads the document as cleaned markdown. For a Google Doc it first
+// reads the Docs revisionId, so setBase can remember which revision the base
+// is (an edit made between the two reads only causes one extra check).
 func (e *Engine) download(ctx context.Context, it gdrive.Item) (string, error) {
+	if it.Kind() == gdrive.KindDoc {
+		rev, err := e.remote.DocRevision(ctx, it.ID)
+		if err != nil {
+			return "", err
+		}
+		e.lastRev[it.ID] = rev
+	}
 	raw, err := e.remote.Download(ctx, it)
 	if err != nil {
 		return "", err
@@ -84,6 +94,7 @@ func (e *Engine) download(ctx context.Context, it gdrive.Item) (string, error) {
 // in sync.
 func (e *Engine) setBase(f *state.File, text, exp string, v int64, lf localFile) {
 	f.BaseLocal, f.BaseExport, f.Version = e.put(text), e.put(exp), v
+	f.DocRev = e.lastRev[f.DriveID]
 	f.LocalSize, f.LocalMtime = lf.Size, lf.Mtime
 	f.Conflict, f.LastError, f.PendingTrash = nil, "", false
 	e.save()
@@ -157,7 +168,8 @@ func (e *Engine) syncFile(ctx context.Context, m *mapping, f *state.File, item *
 	localChanged := state.Hash(text) != f.BaseLocal
 
 	exp, remoteChanged := "", false
-	if item.Version != f.Version || f.Conflict != nil {
+	if item.Version != f.Version || f.Conflict != nil || e.force[f.DriveID] {
+		delete(e.force, f.DriveID)
 		if exp, err = e.download(ctx, *item); err != nil {
 			return err
 		}
@@ -232,14 +244,27 @@ func (e *Engine) push(ctx context.Context, m *mapping, f *state.File, item gdriv
 	if err != nil {
 		return err
 	}
-	if cur.Version != item.Version {
+	changed := cur.Version != item.Version
+	if !changed && cur.Kind() == gdrive.KindDoc {
+		// Drive registers a Docs edit ~2 minutes late; the Docs revision
+		// does not. Without this check a phone edit made just before an
+		// Obsidian save would be overwritten.
+		rev, err := e.remote.DocRevision(ctx, f.DriveID)
+		if err != nil {
+			return err
+		}
+		changed = rev != f.DocRev
+	}
+	if changed {
 		exp, err := e.download(ctx, cur)
 		if err != nil {
 			return err
 		}
 		if state.Hash(exp) != f.BaseExport {
+			e.force[f.DriveID] = true
 			return e.syncFile(ctx, m, f, &cur, nil, depth+1)
 		}
+		f.DocRev = e.lastRev[f.DriveID]
 	}
 	up, err := e.remote.Upload(ctx, cur, toRemote(cur, text))
 	if err != nil {

@@ -27,6 +27,7 @@ type Remote interface {
 	ListFolder(ctx context.Context, folderID string) ([]gdrive.Item, error)
 	Get(ctx context.Context, id string) (gdrive.Item, error)
 	Download(ctx context.Context, it gdrive.Item) (string, error)
+	DocRevision(ctx context.Context, id string) (string, error)
 	Upload(ctx context.Context, it gdrive.Item, content string) (gdrive.Item, error)
 	Rename(ctx context.Context, id, name, oldParent, newParent string) (gdrive.Item, error)
 	CreateDoc(ctx context.Context, parent, name, content string) (gdrive.Item, error)
@@ -99,6 +100,8 @@ type Engine struct {
 	lastPoll  time.Time
 	offline   string
 	onConflct func(string)
+	lastRev   map[string]string // Docs revisionId read before the last download, per file
+	force     map[string]bool   // files whose Drive content must be read even if the version is the same
 }
 
 // Options configure a new engine.
@@ -134,6 +137,7 @@ func New(o Options) (*Engine, error) {
 		reqs:      make(chan request, 64),
 		dirtyMaps: map[string]bool{}, needFull: map[string]bool{},
 		pending: map[string]bool{}, fileErrs: map[string]string{},
+		lastRev: map[string]string{}, force: map[string]bool{},
 	}
 	for _, m := range o.Config.Mappings {
 		id, err := config.FolderID(m.DriveFolder)
@@ -172,6 +176,10 @@ func (e *Engine) LocalChanged(mappingID string) { e.send(request{kind: "local", 
 // Poll asks Drive for changes now (wake-up, back at the computer, manual).
 func (e *Engine) Poll() { e.send(request{kind: "poll"}) }
 
+// CheckAll checks every document for edits right now, including edits Drive
+// has not registered yet (back at the computer, wake-up, "Sync now").
+func (e *Engine) CheckAll() { e.send(request{kind: "deep"}) }
+
 // SyncAll runs a full scan of every mapping.
 func (e *Engine) SyncAll() { e.send(request{kind: "full"}) }
 
@@ -204,6 +212,7 @@ func (e *Engine) Run(ctx context.Context) {
 	e.pruneBackups()
 	e.store.GC(e.st)
 	e.fullScanAll(ctx)
+	e.deepCheck(ctx)
 	poll := time.NewTicker(time.Duration(e.cfg.PollSeconds) * time.Second)
 	defer poll.Stop()
 	safety := time.NewTicker(5 * time.Minute)
@@ -229,6 +238,9 @@ func (e *Engine) Run(ctx context.Context) {
 				debounce.Reset(700 * time.Millisecond)
 			case "poll":
 				e.poll(ctx)
+			case "deep":
+				e.poll(ctx)
+				e.deepCheck(ctx)
 			case "full":
 				e.fullScanAll(ctx)
 			case "resolve":

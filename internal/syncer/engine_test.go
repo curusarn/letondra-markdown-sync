@@ -442,3 +442,54 @@ func TestRawMarkdownFileOnDrive(t *testing.T) {
 		t.Errorf("raw push: %q", h.driveText(id))
 	}
 }
+
+// Drive registers a Docs edit ~2 minutes late. A phone edit made just
+// before an Obsidian save must be merged, not overwritten.
+func TestLaggedPhoneEditIsMergedBeforePush(t *testing.T) {
+	h := newHarness(t)
+	id := h.d.add(h.rootID, "N", gdrive.MimeDoc, "")
+	h.scan()
+	h.write("N.md", "a\nb\nc\n")
+	h.local()
+	h.d.lag = true
+	h.d.phoneEdit(id, func(s string) string { return strings.Replace(s, "c", "c z telefonu", 1) })
+	h.write("N.md", "a z PC\nb\nc\n")
+	h.local()
+	h.noErrors()
+	if got := h.read("N.md"); got != "a z PC\nb\nc z telefonu\n" {
+		t.Errorf("local: %q", got)
+	}
+	if got := h.driveText(id); !strings.Contains(got, "a z PC") || !strings.Contains(got, "c z telefonu") {
+		t.Errorf("drive: %q", got)
+	}
+	// When Drive finally registers the edit, nothing changes any more.
+	h.d.flushLag()
+	h.poll()
+	if got := h.read("N.md"); got != "a z PC\nb\nc z telefonu\n" {
+		t.Errorf("after flush: %q", got)
+	}
+}
+
+func TestDeepCheckCatchesLaggedEdit(t *testing.T) {
+	h := newHarness(t)
+	id := h.d.add(h.rootID, "N", gdrive.MimeDoc, "")
+	h.d.add(h.rootID, "Other", gdrive.MimeDoc, "x\n")
+	h.scan()
+	h.write("N.md", "a\nb\n")
+	h.local()
+	h.d.lag = true
+	h.d.phoneEdit(id, func(s string) string { return strings.Replace(s, "b", "b z telefonu", 1) })
+	h.poll()
+	if strings.Contains(h.read("N.md"), "telefonu") {
+		t.Fatal("poll saw a lagged edit; the test does not model the lag")
+	}
+	downloads := h.d.calls["download"]
+	h.e.deepCheck(h.ctx)
+	h.noErrors()
+	if got := h.read("N.md"); got != "a\nb z telefonu\n" {
+		t.Errorf("deep check missed the edit: %q", got)
+	}
+	if n := h.d.calls["download"] - downloads; n != 1 {
+		t.Errorf("deep check downloaded %d documents, want only the changed one", n)
+	}
+}

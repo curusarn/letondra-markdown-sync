@@ -420,3 +420,60 @@ func first(s []string) string {
 	}
 	return s[0]
 }
+
+// deepCheck asks Docs for the current revision of every tracked document
+// (8 at a time) and syncs the ones that moved. It catches edits the changes
+// feed does not show yet, at one small request per document, so it only runs
+// on start, wake-up, return to the computer and "Sync now".
+func (e *Engine) deepCheck(ctx context.Context) {
+	type job struct{ id, rev string }
+	var jobs []job
+	for _, f := range e.st.Files {
+		if f.MimeType == gdrive.MimeDoc && f.Conflict == nil {
+			jobs = append(jobs, job{id: f.DriveID, rev: f.DocRev})
+		}
+	}
+	type result struct {
+		id  string
+		rev string
+		err error
+	}
+	res := make(chan result, len(jobs))
+	sem := make(chan struct{}, 8)
+	for _, j := range jobs {
+		j := j
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem }()
+			rev, err := e.remote.DocRevision(ctx, j.id)
+			res <- result{j.id, rev, err}
+		}()
+	}
+	changed := 0
+	for range jobs {
+		r := <-res
+		f := e.st.Files[r.id]
+		if f == nil {
+			continue
+		}
+		if r.err != nil {
+			if gdrive.IsNotFound(r.err) {
+				continue // the next poll or scan sees it gone
+			}
+			e.failed(f.RelPath, r.err, func() { e.needPoll = true })
+			continue
+		}
+		if r.rev == f.DocRev {
+			continue
+		}
+		changed++
+		e.force[f.DriveID] = true
+		if m := e.mappingByID(f.Mapping); m != nil {
+			if err := e.syncFile(ctx, m, f, nil, nil, 0); err != nil {
+				e.failed(f.RelPath, err, func() { e.needPoll = true })
+			}
+		}
+	}
+	e.logf("checked %d documents for edits, %d changed", len(jobs), changed)
+	e.lastPoll = e.now()
+}

@@ -28,10 +28,13 @@ type fakeDrive struct {
 	fail     error // returned by every call while set
 	calls    map[string]int
 	trashed  map[string]bool
+	rev      map[string]int // Docs revision: changes at once on every edit
+	lag      bool           // phone edits do not reach version/changes until flushLag
+	lagged   []string
 }
 
 func newFakeDrive() *fakeDrive {
-	return &fakeDrive{items: map[string]*gdrive.Item{}, content: map[string]string{}, clock: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC), calls: map[string]int{}, trashed: map[string]bool{}}
+	return &fakeDrive{items: map[string]*gdrive.Item{}, content: map[string]string{}, clock: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC), calls: map[string]int{}, trashed: map[string]bool{}, rev: map[string]int{}}
 }
 
 func (d *fakeDrive) tick() time.Time { d.clock = d.clock.Add(time.Second); return d.clock }
@@ -64,7 +67,34 @@ func (d *fakeDrive) phoneEdit(id string, f func(string) string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.content[id] = unexport(f(fakeExport(d.content[id])))
+	d.rev[id]++
+	if d.lag {
+		d.lagged = append(d.lagged, id) // Drive registers it later
+		return
+	}
 	d.touch(id)
+}
+
+// flushLag lets Drive register the lagged Docs edits.
+func (d *fakeDrive) flushLag() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, id := range d.lagged {
+		d.touch(id)
+	}
+	d.lagged = nil
+}
+
+func (d *fakeDrive) DocRevision(ctx context.Context, id string) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if err := d.enter("docrev"); err != nil {
+		return "", err
+	}
+	if _, ok := d.items[id]; !ok {
+		return "", &gdrive.APIError{Status: 404}
+	}
+	return fmt.Sprintf("r%d", d.rev[id]), nil
 }
 
 func (d *fakeDrive) enter(name string) error {
@@ -182,6 +212,7 @@ func (d *fakeDrive) Upload(ctx context.Context, it gdrive.Item, content string) 
 		return gdrive.Item{}, err
 	}
 	d.content[it.ID] = content
+	d.rev[it.ID]++
 	d.touch(it.ID)
 	return *d.items[it.ID], nil
 }

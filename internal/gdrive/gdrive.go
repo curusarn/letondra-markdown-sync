@@ -300,6 +300,17 @@ func (c *Client) Download(ctx context.Context, it Item) (string, error) {
 	return string(data), err
 }
 
+// DocRevision returns the Google Docs revisionId of a document. Unlike the
+// Drive version and the changes feed, which register an edit made in Docs
+// only about two minutes later (measured 18 Oct 2026), it changes at once.
+func (c *Client) DocRevision(ctx context.Context, id string) (string, error) {
+	var r struct {
+		RevisionID string `json:"revisionId"`
+	}
+	_, err := do(ctx, c.SA, "GET", "https://docs.googleapis.com/v1/documents/"+url.PathEscape(id)+"?fields=revisionId", nil, "", &r)
+	return r.RevisionID, err
+}
+
 // Upload replaces the file's content. For a Google Doc, Docs converts the
 // markdown into formatting. Returns the new metadata (with the new version).
 func (c *Client) Upload(ctx context.Context, it Item, content string) (Item, error) {

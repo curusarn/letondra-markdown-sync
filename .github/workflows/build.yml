@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# A newer push supersedes a build still running; only the newest is released.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -47,6 +52,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v$V" letondra-markdown-sync.exe \
-            --target "$GITHUB_SHA" --title "v$V" \
-            --notes "Build of ${GITHUB_SHA::7}: $(git log -1 --format=%s)"
+          # The releases API occasionally answers 403 for a moment; retry.
+          for i in 1 2 3 4 5; do
+            gh release create "v$V" letondra-markdown-sync.exe \
+              --target "$GITHUB_SHA" --title "v$V" \
+              --notes "Build of ${GITHUB_SHA::7}: $(git log -1 --format=%s)" && exit 0
+            sleep $((i * 10))
+          done
+          exit 1

@@ -20,7 +20,7 @@ Users read Czech; the UI text is Czech. Code, comments and these docs are in Eng
 | Go, one `.exe`, no installer | Cross-compiles from any OS and has no runtime to install. All logic except the tray, idle detection and DPAPI is testable on Mac/Linux. |
 | Tray icon plus a local web UI (`127.0.0.1:47613`) | The simplest "simple UI" for the side-by-side conflict view and settings. The fixed port also makes it a single-instance lock: a second start opens the running instance's page. |
 | Service account for edits and change detection; **Simon's own Google account (OAuth Desktop app) only to create docs and folders and to move files to the bin** | The service account has 0 B storage, so `files.create` fails with 403 `storageQuotaExceeded` (verified), and it can't trash files it doesn't own. Simon chose this on 18 Oct 2026. |
-| Cheap change check: `changes.list` with a saved page token, every 30 s and right after wake or return from idle | One request when nothing changed (the engine test `TestIdlePollIsOneRequest` checks this). The service account only sees folders shared with it, so the feed is exactly "my folders". The Drive Activity API also works (`ancestorName`) but isn't needed. |
+| Cheap change check: `changes.list` with a saved page token every 30 s. On start, wake, return from idle and "Sync now", a Docs `revisionId` check of every note. Before every push, a `revisionId` check of that note | One request when nothing changed (the engine test `TestIdlePollIsOneRequest` checks this). The service account only sees folders shared with it, so the feed is exactly "my folders". The Drive Activity API also works (`ancestorName`) but isn't needed. |
 | The merge runs on markdown, with a stored base per file | Drive revisions are merged by Google (3 edits became 1 revision), so they can't be the base. `state.json` + `blobs\` keep the last synced local text and Drive export. |
 | Git-like 3-way merge (`textmerge.Merge3`); edits to neighbouring lines are not a conflict | Fewer conflicts than git. An insertion at the edge of the other side's change *is* a conflict, because the order would be a guess. |
 | Front matter = the block between a horizontal line at the very start of the Doc and the next horizontal line | Simon's rule (18 Oct 2026). YAML pasted as it is gets mangled by Docs. In the Doc each key is its own paragraph and lists are bullets or plain text (`tags: a, b`); both read back as a YAML list. Unchanged keys keep their exact local formatting. |
@@ -128,7 +128,16 @@ The real app (`-no-launch -console`) ran against "Markdown sync test" with Simon
 - **Merge and conflict:** edits on both sides merged on both sides. A same-line edit produced a conflict; the local file stayed untouched while it waited, and the resolution reached both sides.
 - **Renames and deletes:** a local rename renamed the same Drive document, a Drive rename renamed the local file, and a local delete moved the doc to the Drive bin.
 
-**Finding: Docs edits reach Drive late.** An edit made through the Docs API was in the export at once. But the Drive metadata (`version`, `modifiedTime`), the changes feed and the Activity API only showed it about 2 minutes later, so the pull came after about 2.5 minutes. Edits through the Drive upload API show up at once. How long a human edit in the Docs app takes is being measured (see the task thread).
+**Finding: Docs edits reach Drive late, and how the app handles it.**
+- **The lag:** an edit made in Google Docs is in the export at once. But Drive's `version`/`modifiedTime`, the changes feed and the Activity API only register it about 2 minutes later. This was measured for edits through the Docs API; a human edit in the Docs app is not measured yet.
+- **Docs `revisionId`:** it changes the moment the document is edited (`gdrive.DocRevision`, one ~0.5 s request).
+- **Before every push**, the app compares it with the revision stored at the last sync. Without this check, a phone edit made in the last two minutes before an Obsidian save would be overwritten (tests: `TestLaggedPhoneEditIsMergedBeforePush`, plus the real-Drive run).
+- **Deep check** (`Engine.deepCheck`): at start, after wake-up, on return to the computer and on "Sync now", the app reads the revision of every note (8 in parallel) and syncs the ones that moved. On the real Drive it pulled an edit Drive had not registered within 3 s. The 30 s poll stays one request.
+- **Measured latencies:**
+  - a save to Drive: about 4.6 s;
+  - a new note to Drive: about 15 s, because Google's create with conversion alone takes about 6 s;
+  - a new Doc to local: about 10 s;
+  - an edit to local: one poll (≤ 30 s) once Drive registers it, or at once with the deep check.
 
 ### Acceptance checklist on Windows
 

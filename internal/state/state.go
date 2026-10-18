@@ -27,8 +27,9 @@ type File struct {
 	MimeType string `json:"mime_type"`
 	Version  int64  `json:"version"` // Drive version at last sync
 
-	BaseLocal  string `json:"base_local"`  // blob: local text at last sync
-	BaseExport string `json:"base_export"` // blob: cleaned Drive export at last sync
+	BaseLocal  string `json:"base_local"`        // blob: local text at last sync
+	BaseExport string `json:"base_export"`       // blob: cleaned Drive export at last sync
+	DocRev     string `json:"doc_rev,omitempty"` // Docs revisionId read just before that export
 
 	LocalSize  int64 `json:"local_size"`
 	LocalMtime int64 `json:"local_mtime"`
