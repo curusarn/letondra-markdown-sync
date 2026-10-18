@@ -1,0 +1,38 @@
+# On every push to main: run the tests on Windows, build the .exe and publish
+# it as a GitHub release (v0.1.<run number>).
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./...
+      - name: Test (unit + engine tests against the in-memory Drive)
+        run: go test ./...
+      - name: Build exe
+        shell: bash
+        run: |
+          V="0.1.${{ github.run_number }}"
+          echo "V=$V" >> "$GITHUB_ENV"
+          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$V" -o letondra-markdown-sync.exe ./cmd/letondra-markdown-sync
+      - name: Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$V" letondra-markdown-sync.exe \
+            --target "$GITHUB_SHA" --title "v$V" \
+            --notes "Build of ${GITHUB_SHA::7}: $(git log -1 --format=%s)"

@@ -1,0 +1,43 @@
+{{template "head" .}}
+<h1>Markdown Sync</h1>
+<div class="muted">Google Drive ↔ Obsidian · verze {{.Version}}</div>
+<nav>
+ <form class="inline" method="post" action="/api/action"><input type="hidden" name="t" value="{{.Token}}"><input type="hidden" name="do" value="sync"><button class="primary">Synchronizovat teď</button></form>
+ <a class="btn" href="/settings">Nastavení</a>
+ <form class="inline" method="post" action="/api/action"><input type="hidden" name="t" value="{{.Token}}"><input type="hidden" name="do" value="log"><button>Otevřít log</button></form>
+ <form class="inline" method="post" action="/api/action"><input type="hidden" name="t" value="{{.Token}}"><input type="hidden" name="do" value="backups"><button>Zálohy</button></form>
+</nav>
+
+<div class="card">
+ <b class="{{if eq .S.State "ok"}}ok{{else if eq .S.State "conflict"}}warn{{else}}err{{end}}">{{.S.Message}}</b>
+ <div class="muted">Poslední kontrola Drive: {{ago .S.LastSync}}</div>
+</div>
+
+{{range .Problems}}<div class="card err">{{.}} <a href="/settings">Opravit v nastavení</a></div>{{end}}
+
+{{if .S.Conflicts}}<h2>Konflikty</h2>
+{{range .S.Conflicts}}<div class="card">{{.Path}} — <a href="/conflict?id={{.DriveID}}">vyřešit</a></div>{{end}}{{end}}
+
+{{range $root, $err := .S.MappingErr}}<div class="card err"><b>{{$root}}</b><br>{{$err}}
+ {{if or (hasPrefix $err "Z ") (hasPrefix $err "Na Drive chybí")}}<form method="post" action="/api/action"><input type="hidden" name="t" value="{{$.Token}}"><input type="hidden" name="do" value="confirm-delete"><input type="hidden" name="root" value="{{$root}}"><button>Ano, smazání je v pořádku</button></form>{{end}}
+</div>{{end}}
+
+{{if .S.Errors}}<h2>Chyby</h2>{{range .S.Errors}}<div class="card err"><pre>{{.}}</pre></div>{{end}}{{end}}
+
+<h2>Přihlášení Googlem</h2>
+<div class="card">
+{{if .S.SignedIn}}<span class="ok">Přihlášeno.</span> Nové poznámky se na Drive zakládají tvým účtem.
+ <form class="inline" method="post" action="/api/action"><input type="hidden" name="t" value="{{.Token}}"><input type="hidden" name="do" value="signout"><button>Odhlásit</button></form>
+{{else}}Nepřihlášeno. Bez přihlášení se úpravy synchronizují, ale nové poznámky z Obsidianu na Drive nevzniknou.
+ <form class="inline" method="post" action="/api/action"><input type="hidden" name="t" value="{{.Token}}"><input type="hidden" name="do" value="signin"><button class="primary">Přihlásit se Googlem</button></form>
+{{end}}
+{{if .S.Pending}}<div class="warn" style="margin-top:8px">Čeká na přihlášení:</div><pre>{{range .S.Pending}}{{.}}
+{{end}}</pre>{{end}}
+</div>
+
+<h2>Synchronizované složky</h2>
+<table><tr><th>Lokálně</th><th>Google Drive</th></tr>
+{{range .Cfg.Mappings}}<tr><td>{{.Local}}</td><td><a href="https://drive.google.com/drive/folders/{{.DriveFolder}}" target="_blank">{{.DriveFolder}}</a></td></tr>{{end}}
+</table>
+<script>setTimeout(()=>location.reload(),15000)</script>
+{{template "foot"}}

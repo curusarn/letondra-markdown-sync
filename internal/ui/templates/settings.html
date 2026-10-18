@@ -1,0 +1,24 @@
+{{template "head" .}}
+<h1>Nastavení</h1>
+<nav><a class="btn" href="/">← Přehled</a></nav>
+{{if .Msg}}<div class="card err">{{.Msg}}</div>{{end}}
+<form method="post" action="/settings">
+<input type="hidden" name="t" value="{{.Token}}">
+<h2>Přístup</h2>
+<label>JSON klíč service accountu (celá cesta)<input type="text" name="key" value="{{.Cfg.ServiceAccountKey}}" placeholder="C:\Users\...\letondra-gugl-klaud-....json"></label>
+<p class="muted">Service account upravuje existující dokumenty a hlídá změny. Každou složku na Drive mu nasdílej jako Editor.</p>
+<label>JSON OAuth klienta „Desktop app" (celá cesta)<input type="text" name="oauth" value="{{.Cfg.OAuthClient}}" placeholder="C:\Users\...\client_secret_....json"></label>
+<p class="muted">Pro jednorázové přihlášení Googlem, kterým se zakládají nové poznámky.</p>
+<label>Spustit s aplikací<input type="text" name="launch" value="{{.Cfg.Launch}}" placeholder="obsidian://open"></label>
+<p class="muted">Výchozí <code>obsidian://open</code> otevře Obsidian. Může to být i cesta k programu. Prázdné = nic nespouštět.</p>
+<h2>Složky</h2>
+<p class="muted">Synchronizují se jen .md soubory (Google Dokumenty na Drive). Vyloučené: podsložky nebo vzory oddělené čárkou, např. <code>Archiv, *.draft.md</code>.</p>
+<table><tr><th style="width:38%">Lokální složka</th><th style="width:38%">Odkaz na složku na Drive</th><th>Vyloučit</th></tr>
+{{range .Rows}}<tr><td><input type="text" name="local" value="{{.Local}}" placeholder="C:\Users\...\Vault\Škola"></td>
+<td><input type="text" name="drive" value="{{.DriveFolder}}" placeholder="https://drive.google.com/drive/folders/..."></td>
+<td><input type="text" name="exclude" value="{{range $i, $x := .Exclude}}{{if $i}}, {{end}}{{$x}}{{end}}"></td></tr>{{end}}
+</table>
+<p class="muted">Řádek smažeš vyprázdněním obou polí. Další řádek přibude po uložení.</p>
+<button class="primary">Uložit</button>
+</form>
+{{template "foot"}}

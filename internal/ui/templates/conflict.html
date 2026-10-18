@@ -1,0 +1,47 @@
+{{template "head" .}}
+<style>
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.side{border:1px solid var(--line);border-radius:8px;padding:8px;min-height:2em}
+.side.drive{background:var(--l)}.side.local{background:var(--r)}
+.ctx{color:var(--muted);border-left:3px solid var(--line);padding-left:8px;margin:6px 0}
+.block{margin:14px 0;padding:10px;border:1px solid var(--warn);border-radius:10px}
+.block.done{border-color:var(--ok)}
+textarea{width:100%;font:13px/1.45 ui-monospace,Consolas,monospace;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+@media (max-width:700px){.grid{grid-template-columns:1fr}}
+</style>
+<h1>Konflikt: {{.Path}}</h1>
+<p class="muted">Stejné místo se změnilo na Google Drive i v Obsidianu. U každého bloku vyber verzi, nebo výsledek uprav. Ostatní soubory se mezitím synchronizují dál; tenhle čeká, dokud konflikt nevyřešíš.</p>
+<nav><a class="btn" href="/">← Přehled</a></nav>
+<div id="chunks"></div>
+<div class="actions"><button class="primary" id="save">Uložit výsledek</button><span id="msg"></span></div>
+<script>
+const token={{.Token}}, id={{.ID}}, chunks={{.Chunks}};
+const root=document.getElementById('chunks');
+const result=[];
+function el(t,c,txt){const e=document.createElement(t);if(c)e.className=c;if(txt!==undefined)e.textContent=txt;return e}
+const J=a=>a.join('\n');
+chunks.forEach((c,i)=>{
+  if(!c.Conflict){root.appendChild(el('pre','ctx',J(c.Lines)));result[i]=c.Lines;return}
+  result[i]=null;
+  const b=el('div','block');
+  const g=el('div','grid');
+  const l=el('div','side drive');l.appendChild(el('b','','Google Drive'));l.appendChild(el('pre','',c.Remote.length?J(c.Remote):'(smazáno)'));
+  const r=el('div','side local');r.appendChild(el('b','','Obsidian (lokálně)'));r.appendChild(el('pre','',c.Local.length?J(c.Local):'(smazáno)'));
+  g.append(l,r);b.appendChild(g);
+  const ta=el('textarea');ta.rows=Math.max(3,Math.max(c.Remote.length,c.Local.length)+1);ta.placeholder='Výsledek tohoto bloku: vyber verzi tlačítkem, nebo napiš vlastní.';
+  const set=v=>{ta.value=J(v);result[i]=v;b.classList.add('done')};
+  ta.oninput=()=>{result[i]=ta.value===''?[]:ta.value.split('\n');b.classList.add('done')};
+  const a=el('div','actions');
+  [['← Vzít Drive',()=>set(c.Remote)],['Vzít obě',()=>set(c.Remote.concat(c.Local))],['Vzít Obsidian →',()=>set(c.Local)]].forEach(([t,f])=>{const x=el('button','',t);x.onclick=f;a.appendChild(x)});
+  b.append(a,ta);root.appendChild(b);
+});
+document.getElementById('save').onclick=async()=>{
+  const msg=document.getElementById('msg');
+  if(result.some(x=>x===null)){msg.textContent='Ještě nejsou vybrané všechny bloky.';msg.className='err';return}
+  const text=J(result.flat());
+  const res=await fetch('/api/resolve',{method:'POST',headers:{'Content-Type':'application/json','X-LMS':'1'},body:JSON.stringify({ID:id,Text:text})});
+  if(res.ok){location.href='/'}else{msg.textContent=await res.text();msg.className='err';setTimeout(()=>location.reload(),2500)}
+};
+</script>
+{{template "foot"}}

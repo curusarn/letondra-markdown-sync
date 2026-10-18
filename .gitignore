@@ -1,0 +1,8 @@
+# Build output
+*.exe
+/dist/
+# Never commit credentials
+*.json.key
+client_secret_*.json
+letondra-gugl-klaud-*.json
+google-token.bin
