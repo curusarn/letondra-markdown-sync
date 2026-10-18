@@ -167,3 +167,12 @@ func TestExportToLocalAndSameContent(t *testing.T) {
 		t.Errorf("SameContent true for different text")
 	}
 }
+
+func TestBoldHeadingFromDocs(t *testing.T) {
+	if got := Clean("# **E2E poznámka**\n\nText **tučně**.\n"); got != "# E2E poznámka\n\nText **tučně**.\n" {
+		t.Errorf("got %q", got)
+	}
+	if Norm("# **Nadpis**") != Norm("# Nadpis") {
+		t.Errorf("Norm differs for bold heading")
+	}
+}

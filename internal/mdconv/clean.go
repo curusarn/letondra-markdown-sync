@@ -34,6 +34,7 @@ var (
 	sameLinkRe = regexp.MustCompile(`\[([^\]\n]+)\]\(([^)\s]+)\)`)
 	fenceRe    = regexp.MustCompile("^\\s*(```|~~~)")
 	headingRe  = regexp.MustCompile(`^#{1,6}(\s|$)`)
+	boldHeadRe = regexp.MustCompile(`^(#{1,6} +)\*\*([^*]+)\*\*\s*$`)
 	hrRe       = regexp.MustCompile(`^\s*([-*_])(\s*[-*_]){2,}\s*$`)
 	quoteRe    = regexp.MustCompile(`^\s*>`)
 	tableRowRe = regexp.MustCompile(`^\s*\|.*\|\s*$`)
@@ -66,6 +67,9 @@ func Clean(export string) string {
 		} else {
 			l = Unescape(l)
 			l = bareLinks(l)
+			// Docs sometimes exports a heading as "# **Title**" (seen on
+			// documents created through the API); a heading is bold anyway.
+			l = boldHeadRe.ReplaceAllString(l, "$1$2")
 		}
 		out = append(out, l)
 	}

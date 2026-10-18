@@ -170,6 +170,7 @@ func Norm(l string) string {
 	t = anyEscapeRe.ReplaceAllString(t, "$1")
 	t = bareLinks(t)
 	t = bulletRe.ReplaceAllString(t, "- ")
+	t = boldHeadRe.ReplaceAllString(t, "$1$2")
 	return spacesRe.ReplaceAllString(strings.TrimSpace(t), " ")
 }
 

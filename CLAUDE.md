@@ -74,6 +74,7 @@ How one file syncs (`syncer/file.go: syncFile`):
   - soft line breaks, unless a line ends with two spaces.
 - **Kept:** headings, bold, italics, strikethrough, inline code, links, tables, nested lists, checkboxes, footnotes, `[[wikilinks]]`, `#tags` and `==highlights==` as plain text, Czech diacritics.
 - **Export is a fixed point:** export → import → export gives identical text, so after our own upload the base export is stable.
+- **Bold headings:** documents created through the API export their headings as `# **Title**`; `Clean` strips the `**`.
 - **Export of a Doc that starts with a horizontal line:** `---`, front matter paragraphs separated by blank lines, `---`. Two lines without a blank line between them are joined into one paragraph.
 - **Service account:** it can't create files (`storageQuotaExceeded`) but can create folders in its own Drive. It edits shared files fine. In Drive Activity its own edits show as `isCurrentUser: true`.
 
@@ -117,6 +118,17 @@ go run ./cmd/letondra-markdown-sync -dir /tmp/lms-app -no-launch -console
 ```
 
 `-dir` holds `config.json`. Use the test folder for the mapping.
+
+### End-to-end run on 18 Oct 2026 (Mac, real Drive, test folder)
+
+The real app (`-no-launch -console`) ran against "Markdown sync test" with Simon signed in. Everything passed:
+- **New notes:** a new local note and a note in a new subfolder were created on Drive, owned by Simon's account, and the folder was created too.
+- **Latency:** a save showed on Drive in 5 s. A new Google Doc on Drive appeared locally in 10 s. A doc moved to the Drive bin left locally in 9 s, with a backup.
+- **Edits:** a Drive edit came down with the front matter, `[[links]]`, `#tags` and the code fence intact.
+- **Merge and conflict:** edits on both sides merged on both sides. A same-line edit produced a conflict; the local file stayed untouched while it waited, and the resolution reached both sides.
+- **Renames and deletes:** a local rename renamed the same Drive document, a Drive rename renamed the local file, and a local delete moved the doc to the Drive bin.
+
+**Finding: Docs edits reach Drive late.** An edit made through the Docs API was in the export at once. But the Drive metadata (`version`, `modifiedTime`), the changes feed and the Activity API only showed it about 2 minutes later, so the pull came after about 2.5 minutes. Edits through the Drive upload API show up at once. How long a human edit in the Docs app takes is being measured (see the task thread).
 
 ### Acceptance checklist on Windows
 
