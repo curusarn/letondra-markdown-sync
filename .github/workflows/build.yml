@@ -28,6 +28,20 @@ jobs:
           V="0.1.${{ github.run_number }}"
           echo "V=$V" >> "$GITHUB_ENV"
           go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$V" -o letondra-markdown-sync.exe ./cmd/letondra-markdown-sync
+      - name: Smoke test (start the exe, check its UI answers, stop it)
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "lms-smoke"
+          $p = Start-Process -FilePath .\letondra-markdown-sync.exe -ArgumentList "-dir `"$dir`" -no-launch" -PassThru
+          Start-Sleep -Seconds 6
+          if ($p.HasExited) { Get-Content (Join-Path $dir "fatal.txt") -ErrorAction SilentlyContinue; throw "exe exited with $($p.ExitCode)" }
+          $r = Invoke-WebRequest -Uri "http://127.0.0.1:47613/" -SkipHttpErrorCheck
+          if ($r.StatusCode -ne 403) { throw "UI without token answered $($r.StatusCode), want 403" }
+          $tok = Get-Content (Join-Path $dir "ui-token")
+          $r = Invoke-WebRequest -Uri "http://127.0.0.1:47613/settings?t=$tok"
+          if ($r.StatusCode -ne 200 -or $r.Content -notmatch "Nastavení") { throw "settings page did not render" }
+          Get-Content (Join-Path $dir "app.log")
+          Stop-Process -Id $p.Id
       - name: Release
         shell: bash
         env:
